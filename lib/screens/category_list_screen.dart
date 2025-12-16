@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
-class CategoryScreen extends StatefulWidget {
-  const CategoryScreen({super.key});
+class CategoryListScreen extends StatefulWidget {
+  const CategoryListScreen({super.key});
 
   @override
-  State<CategoryScreen> createState() => _CategoryScreenState();
+  State<CategoryListScreen> createState() => _CategoryListScreenState();
 }
 
-class _CategoryScreenState extends State<CategoryScreen> {
-  final TextEditingController controller = TextEditingController();
+class _CategoryListScreenState extends State<CategoryListScreen> {
   List categories = [];
+  final TextEditingController controller = TextEditingController();
 
   @override
   void initState() {

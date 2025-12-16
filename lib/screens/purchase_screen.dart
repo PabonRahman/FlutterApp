@@ -78,7 +78,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         child: Column(
           children: [
             DropdownButtonFormField<int>(
-              value: selectedProductId,
+              initialValue: selectedProductId,
               hint: const Text("Select Product"),
               items: products
                   .map<DropdownMenuItem<int>>((p) => DropdownMenuItem<int>(
