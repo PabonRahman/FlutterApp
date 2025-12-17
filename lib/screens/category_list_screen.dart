@@ -9,7 +9,7 @@ class CategoryListScreen extends StatefulWidget {
 }
 
 class _CategoryListScreenState extends State<CategoryListScreen> {
-  List categories = [];
+  List<Map<String, dynamic>> categories = [];
   final TextEditingController controller = TextEditingController();
 
   @override
@@ -19,19 +19,21 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   }
 
   Future<void> loadCategories() async {
-    categories = await DatabaseHelper.instance.getCategories();
+    categories = List<Map<String, dynamic>>.from(
+      await DatabaseHelper.instance.getCategories(),
+    );
     setState(() {});
   }
 
   void addCategory() async {
-    if (controller.text.isEmpty) {
+    if (controller.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Category name required")),
       );
       return;
     }
 
-    await DatabaseHelper.instance.addCategory(controller.text);
+    await DatabaseHelper.instance.addCategory(controller.text.trim());
     controller.clear();
     loadCategories();
   }
@@ -39,6 +41,46 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   void deleteCategory(int id) async {
     await DatabaseHelper.instance.deleteCategory(id);
     loadCategories();
+  }
+
+  // ✅ Edit Category Dialog
+  void editCategory(int id, String oldName) {
+    final TextEditingController editController =
+        TextEditingController(text: oldName);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Category'),
+        content: TextField(
+          controller: editController,
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (editController.text.trim().isEmpty) return;
+
+              await DatabaseHelper.instance.updateCategory(
+                id,
+                editController.text.trim(),
+              );
+
+              Navigator.pop(context);
+              loadCategories();
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -50,10 +92,10 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Categories")),
+      appBar: AppBar(title: const Text('Categories')),
       body: Column(
         children: [
-          // Add Category Row
+          // Add Category
           Padding(
             padding: const EdgeInsets.all(15),
             child: Row(
@@ -62,7 +104,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
                   child: TextField(
                     controller: controller,
                     decoration: const InputDecoration(
-                      labelText: "Category Name",
+                      labelText: 'Category Name',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -78,15 +120,11 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
               ],
             ),
           ),
+
           // Category List
           Expanded(
             child: categories.isEmpty
-                ? const Center(
-                    child: Text(
-                      "No categories added",
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  )
+                ? const Center(child: Text('No categories added'))
                 : ListView.builder(
                     padding: const EdgeInsets.all(10),
                     itemCount: categories.length,
@@ -101,11 +139,24 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
                         child: ListTile(
                           title: Text(
                             c['name'],
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => deleteCategory(c['id']),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit,
+                                    color: Colors.blue),
+                                onPressed: () =>
+                                    editCategory(c['id'], c['name']),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete,
+                                    color: Colors.red),
+                                onPressed: () => deleteCategory(c['id']),
+                              ),
+                            ],
                           ),
                         ),
                       );

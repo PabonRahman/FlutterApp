@@ -54,7 +54,7 @@ class _ProductScreenState extends State<ProductScreen> {
             TextField(controller: qty, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Quantity")),
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
-              value: categoryId,
+              initialValue: categoryId,
               items: categories.map<DropdownMenuItem<int>>((c) {
                 return DropdownMenuItem(value: c['id'], child: Text(c['name']));
               }).toList(),
