@@ -7,7 +7,6 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
-  // ---------- Database getter ----------
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('inventory.db');
@@ -20,31 +19,15 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6, // Increment to 6 for fresh start
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: (db, oldVersion, newVersion) async {
-        // For simplicity, drop all tables and recreate
-        if (oldVersion < 6) {
-          await db.execute('DROP TABLE IF EXISTS purchases');
-          await db.execute('DROP TABLE IF EXISTS sales');
-          await db.execute('DROP TABLE IF EXISTS products');
-          await db.execute('DROP TABLE IF EXISTS categories');
-          await db.execute('DROP TABLE IF EXISTS users');
-          await _createDB(db, newVersion);
-        }
-      },
     );
   }
 
-  // ---------- Create initial tables ----------
   Future _createDB(Database db, int version) async {
-    print('Creating database tables version $version');
-    
+    // Users table
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
@@ -52,54 +35,89 @@ class DatabaseHelper {
       )
     ''');
 
+    // Categories table
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS categories (
+      CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
         created_at TEXT
       )
     ''');
 
+    // Warehouses table
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS products (
+      CREATE TABLE warehouses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        price REAL NOT NULL CHECK(price >= 0),
-        quantity INTEGER NOT NULL CHECK(quantity >= 0) DEFAULT 0,
+        location TEXT,
+        capacity INTEGER DEFAULT 0,
+        manager TEXT,
+        phone TEXT,
+        email TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    // Products table (NO price column)
+    await db.execute('''
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 0,
         category_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
         created_at TEXT,
         updated_at TEXT,
-        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
       )
     ''');
 
-    // CORRECTED: Using unit_price (with underscore)
+    // Purchases table
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS purchases (
+      CREATE TABLE purchases (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL CHECK(quantity > 0),
-        unit_price REAL NOT NULL CHECK(unit_price >= 0),
-        total_price REAL NOT NULL CHECK(total_price >= 0),
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        total_price REAL NOT NULL,
         date TEXT,
-        FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE RESTRICT
+        FOREIGN KEY(product_id) REFERENCES products(id)
       )
     ''');
 
-    // CORRECTED: Using unit_price (with underscore)
+    // Sales table
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS sales (
+      CREATE TABLE sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL CHECK(quantity > 0),
-        unit_price REAL NOT NULL CHECK(unit_price >= 0),
-        total_price REAL NOT NULL CHECK(total_price >= 0),
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        total_price REAL NOT NULL,
         date TEXT,
-        FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE RESTRICT
+        FOREIGN KEY(product_id) REFERENCES products(id)
       )
     ''');
+  }
+
+  // ---------- UTILITY ----------
+  Future<void> resetDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
     
-    print('Database tables created successfully');
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'inventory.db');
+    
+    try {
+      await deleteDatabase(path);
+    } catch (e) {
+      // Ignore if doesn't exist
+    }
+    
+    await database;
   }
 
   // ---------- AUTH ----------
@@ -149,7 +167,6 @@ class DatabaseHelper {
 
   Future<int> deleteCategory(int id) async {
     final db = await database;
-    // Check if category has products
     final products = await db.query(
       'products',
       where: 'category_id = ?',
@@ -163,15 +180,82 @@ class DatabaseHelper {
     return db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ---------- PRODUCT ----------
-  Future<int> addProduct(String name, double price, int qty, int categoryId) async {
+  // ---------- WAREHOUSE ----------
+  Future<int> addWarehouse(Map<String, dynamic> warehouse) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    return db.insert('products', {
+    return db.insert('warehouses', {
+      'name': warehouse['name'],
+      'location': warehouse['location'],
+      'capacity': warehouse['capacity'],
+      'manager': warehouse['manager'],
+      'phone': warehouse['phone'],
+      'email': warehouse['email'],
+      'created_at': now,
+      'updated_at': now,
+    });
+  }
+
+  // FIXED: This method now takes 0 parameters
+  Future<List<Map<String, dynamic>>> getWarehouses() async {
+    final db = await database;
+    return db.query('warehouses', orderBy: 'name');
+  }
+
+  Future<Map<String, dynamic>?> getWarehouse(int id) async {
+    final db = await database;
+    final res = await db.query(
+      'warehouses',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<int> updateWarehouse(int id, Map<String, dynamic> warehouse) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'warehouses',
+      {
+        'name': warehouse['name'],
+        'location': warehouse['location'],
+        'capacity': warehouse['capacity'],
+        'manager': warehouse['manager'],
+        'phone': warehouse['phone'],
+        'email': warehouse['email'],
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteWarehouse(int id) async {
+    final db = await database;
+    final products = await db.query(
+      'products',
+      where: 'warehouse_id = ?',
+      whereArgs: [id],
+    );
+    
+    if (products.isNotEmpty) {
+      throw Exception('Cannot delete warehouse with existing products');
+    }
+    
+    return db.delete('warehouses', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- PRODUCT ----------
+  Future<int> addProduct(String name, int quantity, int categoryId, int? warehouseId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    
+    return await db.insert('products', {
       'name': name,
-      'price': price,
-      'quantity': qty,
+      'quantity': quantity,
       'category_id': categoryId,
+      'warehouse_id': warehouseId,
       'created_at': now,
       'updated_at': now,
     });
@@ -183,41 +267,56 @@ class DatabaseHelper {
       return await db.rawQuery('''
         SELECT 
           products.*, 
-          categories.name AS category_name
+          categories.name AS category_name,
+          warehouses.name AS warehouse_name,
+          warehouses.location AS warehouse_location
         FROM products
         LEFT JOIN categories ON products.category_id = categories.id
+        LEFT JOIN warehouses ON products.warehouse_id = warehouses.id
         ORDER BY products.name
       ''');
     } catch (e) {
-      print('Error getting products: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getProductsByWarehouse(int warehouseId) async {
+    final db = await database;
+    try {
+      return await db.rawQuery('''
+        SELECT 
+          products.*, 
+          categories.name AS category_name
+        FROM products
+        LEFT JOIN categories ON products.category_id = categories.id
+        WHERE products.warehouse_id = ?
+        ORDER BY products.name
+      ''', [warehouseId]);
+    } catch (e) {
       return [];
     }
   }
 
   Future<Map<String, dynamic>?> getProduct(int id) async {
     final db = await database;
-    try {
-      final res = await db.query(
-        'products',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      return res.isNotEmpty ? res.first : null;
-    } catch (e) {
-      print('Error getting product $id: $e');
-      return null;
-    }
+    final res = await db.query(
+      'products',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return res.isNotEmpty ? res.first : null;
   }
 
-  Future<int> updateProduct(int id, String name, double price, int quantity, int categoryId) async {
+  Future<int> updateProduct(int id, String name, int quantity, int categoryId, int? warehouseId) async {
     final db = await database;
+    
     return await db.update(
       'products',
       {
         'name': name,
-        'price': price,
         'quantity': quantity,
         'category_id': categoryId,
+        'warehouse_id': warehouseId,
         'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
@@ -227,6 +326,7 @@ class DatabaseHelper {
 
   Future<int> updateProductQuantity(int id, int newQuantity) async {
     final db = await database;
+    
     return await db.update(
       'products',
       {
@@ -240,32 +340,22 @@ class DatabaseHelper {
 
   Future<int> deleteProduct(int id) async {
     final db = await database;
-    return db.delete('products', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------- PURCHASE ----------
   Future<int> addPurchase(int productId, int quantity, double unitPrice) async {
     final db = await database;
     
-    print('Adding purchase: productId=$productId, quantity=$quantity, unitPrice=$unitPrice');
-    
-    // Start transaction
     await db.execute('BEGIN TRANSACTION');
     
     try {
-      // Get current product
       final product = await getProduct(productId);
-      if (product == null) {
-        throw Exception('Product not found');
-      }
+      if (product == null) throw Exception('Product not found');
       
-      // Calculate total price
       final totalPrice = quantity * unitPrice;
       final now = DateTime.now().toIso8601String();
       
-      print('Inserting into purchases table with unit_price: $unitPrice');
-      
-      // Insert purchase record
       final purchaseId = await db.insert('purchases', {
         'product_id': productId,
         'quantity': quantity,
@@ -274,18 +364,13 @@ class DatabaseHelper {
         'date': now,
       });
       
-      // Update product quantity
       final newQuantity = (product['quantity'] as int) + quantity;
       await updateProductQuantity(productId, newQuantity);
       
-      // Commit transaction
       await db.execute('COMMIT');
-      print('Purchase added successfully with ID: $purchaseId');
       return purchaseId;
     } catch (e) {
-      // Rollback on error
       await db.execute('ROLLBACK');
-      print('Error adding purchase: $e');
       rethrow;
     }
   }
@@ -304,7 +389,6 @@ class DatabaseHelper {
         ORDER BY purchases.date DESC
       ''');
     } catch (e) {
-      print('Error getting purchases: $e');
       return [];
     }
   }
@@ -312,11 +396,9 @@ class DatabaseHelper {
   Future<int> deletePurchase(int id) async {
     final db = await database;
     
-    // Start transaction
     await db.execute('BEGIN TRANSACTION');
     
     try {
-      // Get purchase details
       final purchase = await db.query(
         'purchases',
         where: 'id = ?',
@@ -330,23 +412,19 @@ class DatabaseHelper {
       final productId = purchase.first['product_id'] as int;
       final quantity = purchase.first['quantity'] as int;
       
-      // Get current product quantity
       final product = await getProduct(productId);
       if (product == null) {
         throw Exception('Product not found');
       }
       
-      // Check if we have enough stock to deduct
       final currentQty = product['quantity'] as int;
       if (currentQty < quantity) {
         throw Exception('Insufficient stock to reverse this purchase');
       }
       
-      // Update product quantity (subtract)
       final newQuantity = currentQty - quantity;
       await updateProductQuantity(productId, newQuantity);
       
-      // Delete purchase record
       final result = await db.delete(
         'purchases',
         where: 'id = ?',
@@ -362,32 +440,24 @@ class DatabaseHelper {
   }
 
   // ---------- SALE ----------
-  Future<int> addSale(int productId, int quantity) async {
+  Future<int> addSale(int productId, int quantity, double unitPrice) async {
     final db = await database;
     
-    // Start transaction
     await db.execute('BEGIN TRANSACTION');
     
     try {
-      // Get product with current price
       final product = await getProduct(productId);
-      if (product == null) {
-        throw Exception('Product not found');
-      }
+      if (product == null) throw Exception('Product not found');
       
       final currentQty = product['quantity'] as int;
-      final unitPrice = product['price'] as double;
       
-      // Check stock availability
       if (currentQty < quantity) {
         throw Exception('Insufficient stock. Available: $currentQty');
       }
       
-      // Calculate total price
       final totalPrice = quantity * unitPrice;
       final now = DateTime.now().toIso8601String();
       
-      // Insert sale record
       final saleId = await db.insert('sales', {
         'product_id': productId,
         'quantity': quantity,
@@ -396,7 +466,6 @@ class DatabaseHelper {
         'date': now,
       });
       
-      // Update product quantity
       final newQuantity = currentQty - quantity;
       await updateProductQuantity(productId, newQuantity);
       
@@ -422,7 +491,6 @@ class DatabaseHelper {
         ORDER BY sales.date DESC
       ''');
     } catch (e) {
-      print('Error getting sales: $e');
       return [];
     }
   }
@@ -433,7 +501,6 @@ class DatabaseHelper {
     await db.execute('BEGIN TRANSACTION');
     
     try {
-      // Get sale details
       final sale = await db.query(
         'sales',
         where: 'id = ?',
@@ -447,18 +514,15 @@ class DatabaseHelper {
       final productId = sale.first['product_id'] as int;
       final quantity = sale.first['quantity'] as int;
       
-      // Get current product
       final product = await getProduct(productId);
       if (product == null) {
         throw Exception('Product not found');
       }
       
-      // Update product quantity (add back)
       final currentQty = product['quantity'] as int;
       final newQuantity = currentQty + quantity;
       await updateProductQuantity(productId, newQuantity);
       
-      // Delete sale record
       final result = await db.delete(
         'sales',
         where: 'id = ?',
@@ -478,6 +542,7 @@ class DatabaseHelper {
     try {
       final products = await getProducts();
       final categories = await getCategories();
+      final warehouses = await getWarehouses(); // Now works with 0 parameters
       final purchases = await getPurchases();
       final sales = await getSales();
       
@@ -496,20 +561,89 @@ class DatabaseHelper {
       return {
         'totalProducts': products.length,
         'totalCategories': categories.length,
+        'totalWarehouses': warehouses.length,
         'totalQuantity': totalQuantity,
         'totalPurchaseValue': totalPurchaseValue,
         'totalSaleValue': totalSaleValue,
         'profit': totalSaleValue - totalPurchaseValue,
       };
     } catch (e) {
-      print('Error getting dashboard stats: $e');
       return {
         'totalProducts': 0,
         'totalCategories': 0,
+        'totalWarehouses': 0,
         'totalQuantity': 0,
         'totalPurchaseValue': 0.0,
         'totalSaleValue': 0.0,
         'profit': 0.0,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getWarehouseStats(int warehouseId) async {
+    try {
+      final db = await database;
+      
+      // Get products in this warehouse
+      final products = await getProductsByWarehouse(warehouseId);
+      
+      // Get warehouse details
+      final warehouse = await getWarehouse(warehouseId);
+      
+      // Calculate total quantity and value
+      int totalQuantity = products.fold(0, (sum, p) => sum + (p['quantity'] as int? ?? 0));
+      
+      // Get purchases for products in this warehouse
+      if (products.isEmpty) {
+        return {
+          'warehouse': warehouse,
+          'totalProducts': 0,
+          'totalQuantity': 0,
+          'occupancy': 0.0,
+          'capacity': warehouse?['capacity'] ?? 0,
+        };
+      }
+      
+      final productIds = products.map((p) => p['id']).toList();
+      final placeholders = List.filled(productIds.length, '?').join(',');
+      
+      final purchases = await db.rawQuery('''
+        SELECT SUM(total_price) as total_purchase_value
+        FROM purchases
+        WHERE product_id IN ($placeholders)
+      ''', productIds);
+      
+      final sales = await db.rawQuery('''
+        SELECT SUM(total_price) as total_sale_value
+        FROM sales
+        WHERE product_id IN ($placeholders)
+      ''', productIds);
+      
+      double totalPurchaseValue = purchases.first['total_purchase_value'] as double? ?? 0.0;
+      double totalSaleValue = sales.first['total_sale_value'] as double? ?? 0.0;
+      int capacity = warehouse?['capacity'] as int? ?? 0;
+      double occupancy = capacity > 0 ? (totalQuantity / capacity) * 100 : 0.0;
+      
+      return {
+        'warehouse': warehouse,
+        'totalProducts': products.length,
+        'totalQuantity': totalQuantity,
+        'totalPurchaseValue': totalPurchaseValue,
+        'totalSaleValue': totalSaleValue,
+        'profit': totalSaleValue - totalPurchaseValue,
+        'capacity': capacity,
+        'occupancy': occupancy,
+      };
+    } catch (e) {
+      return {
+        'warehouse': null,
+        'totalProducts': 0,
+        'totalQuantity': 0,
+        'totalPurchaseValue': 0.0,
+        'totalSaleValue': 0.0,
+        'profit': 0.0,
+        'capacity': 0,
+        'occupancy': 0.0,
       };
     }
   }

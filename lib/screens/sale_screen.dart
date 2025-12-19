@@ -12,10 +12,12 @@ class _SaleScreenState extends State<SaleScreen> {
   List<Map<String, dynamic>> products = [];
   int? selectedProductId;
   final quantityController = TextEditingController();
+  final unitPriceController = TextEditingController();
   bool _isLoading = false;
   
   // Focus node for keyboard control
   final quantityFocus = FocusNode();
+  final unitPriceFocus = FocusNode();
 
   @override
   void initState() {
@@ -26,7 +28,9 @@ class _SaleScreenState extends State<SaleScreen> {
   @override
   void dispose() {
     quantityController.dispose();
+    unitPriceController.dispose();
     quantityFocus.dispose();
+    unitPriceFocus.dispose();
     super.dispose();
   }
 
@@ -54,14 +58,18 @@ class _SaleScreenState extends State<SaleScreen> {
     // Hide keyboard
     FocusScope.of(context).unfocus();
     
-    if (selectedProductId == null || quantityController.text.isEmpty) {
+    if (selectedProductId == null || 
+        quantityController.text.isEmpty || 
+        unitPriceController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select product and enter quantity")),
+        const SnackBar(content: Text("Please fill all fields")),
       );
       return;
     }
 
     int qty = int.tryParse(quantityController.text) ?? 0;
+    double unitPrice = double.tryParse(unitPriceController.text) ?? 0.0;
+
     if (qty <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Enter a valid quantity")),
@@ -69,12 +77,39 @@ class _SaleScreenState extends State<SaleScreen> {
       return;
     }
 
+    if (unitPrice <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter a valid unit price")),
+      );
+      return;
+    }
+
+    // Check if enough stock is available
+    final selectedProduct = this.selectedProduct;
+    if (selectedProduct != null) {
+      final availableStock = selectedProduct['quantity'] as int;
+      if (availableStock < qty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Insufficient stock! Available: $availableStock"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
     
     try {
-      await DatabaseHelper.instance.addSale(selectedProductId!, qty);
+      await DatabaseHelper.instance.addSale(
+        selectedProductId!, 
+        qty, 
+        unitPrice
+      );
       
       quantityController.clear();
+      unitPriceController.clear();
       selectedProductId = null;
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,15 +147,16 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   double get calculatedTotal {
-    if (selectedProduct == null || quantityController.text.isEmpty) return 0.0;
+    if (selectedProduct == null || 
+        quantityController.text.isEmpty || 
+        unitPriceController.text.isEmpty) {
+      return 0.0;
+    }
     
-    final price = selectedProduct!['price'];
+    final unitPrice = double.tryParse(unitPriceController.text) ?? 0.0;
     final quantity = int.tryParse(quantityController.text) ?? 0;
     
-    if (price is num && quantity > 0) {
-      return (price as num).toDouble() * quantity;
-    }
-    return 0.0;
+    return unitPrice * quantity;
   }
 
   @override
@@ -165,7 +201,7 @@ class _SaleScreenState extends State<SaleScreen> {
                             
                             // Product Selection
                             DropdownButtonFormField<int>(
-                              value: selectedProductId,
+                              initialValue: selectedProductId,
                               decoration: const InputDecoration(
                                 labelText: "Product *",
                                 border: OutlineInputBorder(),
@@ -191,6 +227,40 @@ class _SaleScreenState extends State<SaleScreen> {
                                   })
                                   .toList(),
                               onChanged: (v) => setState(() => selectedProductId = v),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Unit Price Input
+                            TextField(
+                              controller: unitPriceController,
+                              focusNode: unitPriceFocus,
+                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: "Unit Price (৳) *",
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.attach_money),
+                                hintText: "Enter sale price per unit",
+                              ),
+                              onChanged: (value) => setState(() {}),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Quantity Input
+                            TextField(
+                              controller: quantityController,
+                              focusNode: quantityFocus,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.done,
+                              decoration: const InputDecoration(
+                                labelText: "Quantity *",
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.numbers),
+                                hintText: "Enter quantity",
+                              ),
+                              onChanged: (value) => setState(() {}),
+                              onSubmitted: (_) => addSale(),
                             ),
                             
                             const SizedBox(height: 16),
@@ -242,13 +312,15 @@ class _SaleScreenState extends State<SaleScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
-                                              Text(
-                                                "Price: ৳${selectedProduct!['price']}",
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey,
+                                              if (unitPriceController.text.isNotEmpty && 
+                                                  double.tryParse(unitPriceController.text) != null)
+                                                Text(
+                                                  "Unit Price: ৳${double.parse(unitPriceController.text).toStringAsFixed(2)}",
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey,
+                                                  ),
                                                 ),
-                                              ),
                                             ],
                                           ),
                                         ],
@@ -259,11 +331,25 @@ class _SaleScreenState extends State<SaleScreen> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Text(
-                                            "Total:",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                "Total Amount:",
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              if (quantityController.text.isNotEmpty && 
+                                                  unitPriceController.text.isNotEmpty)
+                                                Text(
+                                                  "${quantityController.text} × ৳${double.parse(unitPriceController.text).toStringAsFixed(2)}",
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                           Text(
                                             "৳${calculatedTotal.toStringAsFixed(2)}",
@@ -281,22 +367,6 @@ class _SaleScreenState extends State<SaleScreen> {
                               ),
                               const SizedBox(height: 8),
                             ],
-                            
-                            // Quantity Input
-                            TextField(
-                              controller: quantityController,
-                              focusNode: quantityFocus,
-                              keyboardType: TextInputType.number,
-                              textInputAction: TextInputAction.done,
-                              decoration: const InputDecoration(
-                                labelText: "Quantity *",
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.numbers),
-                                hintText: "Enter quantity",
-                              ),
-                              onChanged: (value) => setState(() {}),
-                              onSubmitted: (_) => addSale(),
-                            ),
                           ],
                         ),
                       ),
@@ -377,7 +447,6 @@ class _SaleScreenState extends State<SaleScreen> {
                               itemBuilder: (_, index) {
                                 final product = products[index];
                                 final quantity = product['quantity'] as int;
-                                final price = product['price'];
                                 final category = product['category_name'] ?? 'Uncategorized';
                                 
                                 Color statusColor;
@@ -427,7 +496,7 @@ class _SaleScreenState extends State<SaleScreen> {
                                       children: [
                                         const SizedBox(height: 4),
                                         Text(
-                                          "৳${price is num ? price.toStringAsFixed(2) : price} • $category",
+                                          "Category: $category",
                                           style: const TextStyle(fontSize: 12),
                                         ),
                                       ],

@@ -1,10 +1,12 @@
+// screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'product_list_screen.dart';
-import 'category_screen.dart';
+import 'category_list_screen.dart';
 import 'purchase_screen.dart';
 import 'purchase_list_screen.dart';
 import 'sale_screen.dart';
 import 'sale_list_screen.dart';
+import 'warehouse_list_screen.dart';
 import '../database/database_helper.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -18,6 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> stats = {
     'totalProducts': 0,
     'totalCategories': 0,
+    'totalWarehouses': 0,
     'totalQuantity': 0,
     'totalPurchaseValue': 0.0,
     'totalSaleValue': 0.0,
@@ -40,11 +43,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error loading stats: ${e.toString()}")),
       );
-      // Reset stats to default values
       setState(() {
         stats = {
           'totalProducts': 0,
           'totalCategories': 0,
+          'totalWarehouses': 0,
           'totalQuantity': 0,
           'totalPurchaseValue': 0.0,
           'totalSaleValue': 0.0,
@@ -56,24 +59,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Helper method to safely format currency values
   String _formatCurrency(dynamic value) {
     if (value == null) return '৳0.00';
-    
-    final numValue = value is String ? double.tryParse(value) ?? 0.0 : 
-                    (value is num ? value.toDouble() : 0.0);
-    
+
+    final numValue = value is String
+        ? double.tryParse(value) ?? 0.0
+        : (value is num ? value.toDouble() : 0.0);
+
     return '৳${numValue.toStringAsFixed(2)}';
   }
 
-  // Helper method to safely get numeric values
   dynamic _getSafeValue(String key) {
     final value = stats[key];
     if (value == null) {
-      // Return appropriate default based on key
       switch (key) {
         case 'totalProducts':
         case 'totalCategories':
+        case 'totalWarehouses':
         case 'totalQuantity':
           return 0;
         case 'totalPurchaseValue':
@@ -87,15 +89,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return value;
   }
 
-  Widget _statCard(String title, dynamic value, IconData icon, Color color, {String? suffix}) {
-    // Safely format the value
+  Widget _statCard(
+    String title,
+    dynamic value,
+    IconData icon,
+    Color color, {
+    String? suffix,
+  }) {
     final displayValue = value is num ? value.toString() : value.toString();
-    
+
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -115,10 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -137,7 +139,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _dashboardButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _dashboardButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -157,10 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               label,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, color: color),
             ),
           ],
         ),
@@ -172,17 +176,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final safeProfit = _getSafeValue('profit');
     final profitColor = (safeProfit as num) >= 0 ? Colors.green : Colors.red;
-    final profitIcon = (safeProfit as num) >= 0 ? Icons.trending_up : Icons.trending_down;
-    final profitLabel = (safeProfit as num) >= 0 ? "Net Profit" : "Net Loss";
+    final profitIcon = safeProfit >= 0
+        ? Icons.trending_up
+        : Icons.trending_down;
+    final profitLabel = safeProfit >= 0 ? "Net Profit" : "Net Loss";
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard"),
         actions: [
-          IconButton(
-            onPressed: _loadStats,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _loadStats, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: _isLoading
@@ -224,6 +227,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.green,
                         ),
                         _statCard(
+                          "Warehouses",
+                          _getSafeValue('totalWarehouses'),
+                          Icons.warehouse,
+                          Colors.orange,
+                        ),
+                        _statCard(
+                          "Categories",
+                          _getSafeValue('totalCategories'),
+                          Icons.category,
+                          Colors.purple,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Financial Stats
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.5,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      children: [
+                        _statCard(
                           "Total Purchase",
                           _formatCurrency(_getSafeValue('totalPurchaseValue')),
                           Icons.shopping_cart,
@@ -238,19 +266,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
+
                     // Profit Card
                     Card(
                       elevation: 4,
-                      color: (safeProfit as num) >= 0 ? Colors.green[50] : Colors.red[50],
+                      color: safeProfit >= 0
+                          ? Colors.green[50]
+                          : Colors.red[50],
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
-                            Icon(
-                              profitIcon,
-                              color: profitColor,
-                              size: 32,
-                            ),
+                            Icon(profitIcon, color: profitColor, size: 32),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Column(
@@ -279,7 +306,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 24),
+
                     // Quick Actions
                     const Text(
                       "Quick Actions",
@@ -299,7 +328,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.blue,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const ProductListScreen()),
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const ProductListScreen(warehouseId: null),
+                            ),
                           ).then((_) => _loadStats()),
                         ),
                         _dashboardButton(
@@ -308,7 +340,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.orange,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const CategoryScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const CategoryListScreen(),
+                            ),
+                          ).then((_) => _loadStats()),
+                        ),
+                        _dashboardButton(
+                          "Warehouses",
+                          Icons.warehouse,
+                          Colors.blue,
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const WarehouseListScreen(),
+                            ),
                           ).then((_) => _loadStats()),
                         ),
                         _dashboardButton(
@@ -317,7 +362,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.green,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const PurchaseScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const PurchaseScreen(),
+                            ),
                           ).then((_) => _loadStats()),
                         ),
                         _dashboardButton(
@@ -326,7 +373,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.blue,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const PurchaseListScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const PurchaseListScreen(),
+                            ),
                           ),
                         ),
                         _dashboardButton(
@@ -335,7 +384,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.purple,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const SaleScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const SaleScreen(),
+                            ),
                           ).then((_) => _loadStats()),
                         ),
                         _dashboardButton(
@@ -344,7 +395,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Colors.purple,
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const SaleListScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const SaleListScreen(),
+                            ),
                           ),
                         ),
                       ],

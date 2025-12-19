@@ -132,7 +132,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<int>(
-                            value: selectedProductId,
+                            initialValue: selectedProductId,
                             decoration: const InputDecoration(
                               labelText: "Product",
                               border: OutlineInputBorder(),
