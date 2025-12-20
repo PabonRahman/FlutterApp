@@ -23,18 +23,15 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
 
   Future<void> _loadWarehouses() async {
     if (!mounted) return;
-    
+
     setState(() => _isLoading = true);
     try {
-      // This should work - getWarehouses() takes 0 parameters
       warehouses = await DatabaseHelper.instance.getWarehouses();
       filteredWarehouses = List.from(warehouses);
     } catch (e) {
       _showErrorSnackbar("Error loading warehouses: ${e.toString()}");
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -45,13 +42,10 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
       filteredWarehouses = warehouses.where((warehouse) {
         final name = warehouse['name'].toString().toLowerCase();
         final location = warehouse['location']?.toString().toLowerCase() ?? '';
-        return name.contains(query.toLowerCase()) || 
-               location.contains(query.toLowerCase());
+        return name.contains(query.toLowerCase()) || location.contains(query.toLowerCase());
       }).toList();
     }
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _deleteWarehouse(int id) async {
@@ -86,13 +80,13 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
     }
   }
 
-  void _showAddWarehouseDialog() {
-    final nameController = TextEditingController();
-    final locationController = TextEditingController();
-    final capacityController = TextEditingController();
-    final managerController = TextEditingController();
-    final phoneController = TextEditingController();
-    final emailController = TextEditingController();
+  void _showWarehouseDialog({Map<String, dynamic>? warehouse}) {
+    final nameController = TextEditingController(text: warehouse?['name'] ?? '');
+    final locationController = TextEditingController(text: warehouse?['location'] ?? '');
+    final capacityController = TextEditingController(text: warehouse?['capacity']?.toString() ?? '');
+    final managerController = TextEditingController(text: warehouse?['manager'] ?? '');
+    final phoneController = TextEditingController(text: warehouse?['phone'] ?? '');
+    final emailController = TextEditingController(text: warehouse?['email'] ?? '');
 
     final scaffoldContext = context;
 
@@ -101,7 +95,7 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text("Add New Warehouse"),
+            title: Text(warehouse == null ? "Add New Warehouse" : "Edit Warehouse"),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -173,7 +167,7 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
                     return;
                   }
 
-                  final warehouse = {
+                  final newWarehouse = {
                     'name': nameController.text.trim(),
                     'location': locationController.text.trim(),
                     'capacity': int.tryParse(capacityController.text) ?? 0,
@@ -183,12 +177,17 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
                   };
 
                   try {
-                    await DatabaseHelper.instance.addWarehouse(warehouse);
-                    Navigator.pop(context);
-                    if (mounted) {
-                      _loadWarehouses();
+                    if (warehouse == null) {
+                      // Add new
+                      await DatabaseHelper.instance.addWarehouse(newWarehouse);
                       _showSuccessSnackbar("Warehouse added successfully");
+                    } else {
+                      // Edit existing
+                      await DatabaseHelper.instance.updateWarehouse(warehouse['id'], newWarehouse);
+                      _showSuccessSnackbar("Warehouse updated successfully");
                     }
+                    Navigator.pop(context);
+                    if (mounted) _loadWarehouses();
                   } catch (e) {
                     ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                       SnackBar(
@@ -243,7 +242,7 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddWarehouseDialog,
+        onPressed: () => _showWarehouseDialog(),
         child: const Icon(Icons.add),
       ),
       body: _isLoading
@@ -304,7 +303,7 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
                           itemBuilder: (context, index) {
                             final warehouse = filteredWarehouses[index];
                             final capacity = warehouse['capacity'] as int? ?? 0;
-                            
+
                             return Card(
                               elevation: 3,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -349,9 +348,18 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
                                       ),
                                   ],
                                 ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () => _deleteWarehouse(warehouse['id']),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.orange),
+                                      onPressed: () => _showWarehouseDialog(warehouse: warehouse),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () => _deleteWarehouse(warehouse['id']),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

@@ -1,5 +1,6 @@
 // screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
+
 import 'product_list_screen.dart';
 import 'category_list_screen.dart';
 import 'purchase_screen.dart';
@@ -7,6 +8,7 @@ import 'purchase_list_screen.dart';
 import 'sale_screen.dart';
 import 'sale_list_screen.dart';
 import 'warehouse_list_screen.dart';
+import 'login_screen.dart';
 import '../database/database_helper.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -26,6 +28,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'totalSaleValue': 0.0,
     'profit': 0.0,
   };
+
   bool _isLoading = true;
 
   @override
@@ -36,36 +39,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadStats() async {
     setState(() => _isLoading = true);
+
     try {
       final data = await DatabaseHelper.instance.getDashboardStats();
+      if (!mounted) return;
       setState(() => stats = data);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading stats: ${e.toString()}")),
+        SnackBar(content: Text("Error loading stats: $e")),
       );
-      setState(() {
-        stats = {
-          'totalProducts': 0,
-          'totalCategories': 0,
-          'totalWarehouses': 0,
-          'totalQuantity': 0,
-          'totalPurchaseValue': 0.0,
-          'totalSaleValue': 0.0,
-          'profit': 0.0,
-        };
-      });
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   String _formatCurrency(dynamic value) {
     if (value == null) return '৳0.00';
-
     final numValue = value is String
         ? double.tryParse(value) ?? 0.0
         : (value is num ? value.toDouble() : 0.0);
-
     return '৳${numValue.toStringAsFixed(2)}';
   }
 
@@ -96,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color color, {
     String? suffix,
   }) {
-    final displayValue = value is num ? value.toString() : value.toString();
+    final displayValue = value.toString();
 
     return Card(
       elevation: 4,
@@ -108,7 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color),
@@ -120,7 +113,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -152,9 +148,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         width: 150,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -164,7 +162,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               label,
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w600, color: color),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ],
         ),
@@ -172,20 +173,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _logout() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final safeProfit = _getSafeValue('profit');
-    final profitColor = (safeProfit as num) >= 0 ? Colors.green : Colors.red;
-    final profitIcon = safeProfit >= 0
-        ? Icons.trending_up
-        : Icons.trending_down;
+    final safeProfit = _getSafeValue('profit') as num;
+    final profitColor = safeProfit >= 0 ? Colors.green : Colors.red;
+    final profitIcon =
+        safeProfit >= 0 ? Icons.trending_up : Icons.trending_down;
     final profitLabel = safeProfit >= 0 ? "Net Profit" : "Net Loss";
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard"),
         actions: [
-          IconButton(onPressed: _loadStats, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: _loadStats,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+          ),
         ],
       ),
       body: _isLoading
@@ -197,7 +212,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Stats Section
                     const Text(
                       "Statistics",
                       style: TextStyle(
@@ -241,8 +255,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // Financial Stats
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -266,13 +278,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // Profit Card
                     Card(
                       elevation: 4,
-                      color: safeProfit >= 0
-                          ? Colors.green[50]
-                          : Colors.red[50],
+                      color: safeProfit >= 0 ? Colors.green[50] : Colors.red[50],
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Row(
@@ -306,10 +314,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Quick Actions
                     const Text(
                       "Quick Actions",
                       style: TextStyle(
