@@ -19,6 +19,7 @@ class _SaleListScreenState extends State<SaleListScreen> {
     loadSales();
   }
 
+  /// Load sales from database
   Future<void> loadSales() async {
     setState(() => _isLoading = true);
     try {
@@ -39,6 +40,7 @@ class _SaleListScreenState extends State<SaleListScreen> {
     }
   }
 
+  /// Refresh sales list
   Future<void> _refreshSales() async {
     setState(() => _isRefreshing = true);
     await loadSales();
@@ -47,6 +49,7 @@ class _SaleListScreenState extends State<SaleListScreen> {
     }
   }
 
+  /// Delete single sale
   Future<void> _deleteSale(int id) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -101,6 +104,60 @@ class _SaleListScreenState extends State<SaleListScreen> {
     }
   }
 
+  /// Delete all sales
+  Future<void> _deleteAllSales() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete All Sales"),
+        content: const Text(
+          "This will permanently delete all sale history.\n\nAre you sure?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              "Delete All",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await DatabaseHelper.instance.deleteAllSales();
+      await loadSales();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("All sales history deleted"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Format date string
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
@@ -116,6 +173,11 @@ class _SaleListScreenState extends State<SaleListScreen> {
       appBar: AppBar(
         title: const Text("Sales History"),
         actions: [
+          IconButton(
+            onPressed: sales.isEmpty ? null : _deleteAllSales,
+            icon: const Icon(Icons.delete_forever),
+            tooltip: "Delete All",
+          ),
           IconButton(
             onPressed: loadSales,
             icon: const Icon(Icons.refresh),
@@ -160,13 +222,15 @@ class _SaleListScreenState extends State<SaleListScreen> {
                           itemCount: sales.length,
                           itemBuilder: (_, index) {
                             final sale = sales[index];
-                            final productName = sale['product_name']?.toString() ?? 'Unknown Product';
-                            final categoryName = sale['category_name']?.toString() ?? 'Uncategorized';
+                            final productName =
+                                sale['product_name']?.toString() ?? 'Unknown Product';
+                            final categoryName =
+                                sale['category_name']?.toString() ?? 'Uncategorized';
                             final quantity = sale['quantity'] as int? ?? 0;
                             final unitPrice = sale['unit_price'];
                             final totalPrice = sale['total_price'];
                             final date = sale['date']?.toString() ?? '';
-                            
+
                             return Card(
                               elevation: 2,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -188,14 +252,17 @@ class _SaleListScreenState extends State<SaleListScreen> {
                                     context: context,
                                     builder: (context) => AlertDialog(
                                       title: const Text("Confirm Delete"),
-                                      content: const Text("This sale record will be deleted. This action cannot be undone."),
+                                      content: const Text(
+                                          "This sale record will be deleted. This action cannot be undone."),
                                       actions: [
                                         TextButton(
-                                          onPressed: () => Navigator.pop(context, false),
+                                          onPressed: () =>
+                                              Navigator.pop(context, false),
                                           child: const Text("Cancel"),
                                         ),
                                         TextButton(
-                                          onPressed: () => Navigator.pop(context, true),
+                                          onPressed: () =>
+                                              Navigator.pop(context, true),
                                           child: const Text(
                                             "Delete",
                                             style: TextStyle(color: Colors.red),

@@ -360,7 +360,7 @@ class _ProductScreenState extends State<ProductScreen> {
                       const SizedBox(height: 16),
 
                       DropdownButtonFormField<int>(
-                        value: selectedCategoryId,
+                        initialValue: selectedCategoryId,
                         decoration: const InputDecoration(
                           labelText: "Category *",
                           border: OutlineInputBorder(),
@@ -379,7 +379,7 @@ class _ProductScreenState extends State<ProductScreen> {
                       const SizedBox(height: 16),
 
                       DropdownButtonFormField<int?>(
-                        value: selectedWarehouseId,
+                        initialValue: selectedWarehouseId,
                         decoration: const InputDecoration(
                           labelText: "Warehouse (Optional)",
                           border: OutlineInputBorder(),

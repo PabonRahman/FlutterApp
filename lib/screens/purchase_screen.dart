@@ -21,21 +21,25 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     loadProducts();
   }
 
-  void loadProducts() async {
+  Future<void> loadProducts() async {
     setState(() => _isLoading = true);
     try {
-      products = List<Map<String, dynamic>>.from(await DatabaseHelper.instance.getProducts());
+      products = List<Map<String, dynamic>>.from(
+        await DatabaseHelper.instance.getProducts(),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading products: ${e.toString()}")),
+        SnackBar(content: Text("Error loading products: $e")),
       );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  void addPurchase() async {
-    if (selectedProductId == null || quantityController.text.isEmpty || priceController.text.isEmpty) {
+  Future<void> addPurchase() async {
+    if (selectedProductId == null ||
+        quantityController.text.isEmpty ||
+        priceController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields")),
       );
@@ -45,16 +49,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     int qty = int.tryParse(quantityController.text) ?? 0;
     double price = double.tryParse(priceController.text) ?? 0;
 
-    if (qty <= 0) {
+    if (qty <= 0 || price <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid quantity")),
-      );
-      return;
-    }
-
-    if (price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid price")),
+        const SnackBar(content: Text("Enter valid quantity & price")),
       );
       return;
     }
@@ -62,7 +59,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await DatabaseHelper.instance.addPurchase(selectedProductId!, qty, price);
+      await DatabaseHelper.instance.addPurchase(
+        selectedProductId!,
+        qty,
+        price,
+      );
 
       quantityController.clear();
       priceController.clear();
@@ -70,7 +71,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Purchase added successfully"),
+          content: Text("Purchase saved successfully"),
           backgroundColor: Colors.green,
         ),
       );
@@ -79,13 +80,49 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error: ${e.toString()}"),
+          content: Text("Error: $e"),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> product) {
+    int qty = product['quantity'];
+    Color stockColor =
+        qty <= 0 ? Colors.red : qty <= 10 ? Colors.orange : Colors.green;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: stockColor,
+          child: Text(
+            qty.toString(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(product['name']),
+        subtitle: Text(
+          "৳${product['price']} • ${product['category_name'] ?? 'Uncategorized'}",
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: qty <= 10
+            ? Chip(
+                label: Text(qty <= 0 ? "Out" : "Low"),
+                backgroundColor:
+                    qty <= 0 ? Colors.red[100] : Colors.orange[100],
+              )
+            : null,
+      ),
+    );
   }
 
   @override
@@ -95,41 +132,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     super.dispose();
   }
 
-  Widget _buildProductCard(Map<String, dynamic> product) {
-    int qty = product['quantity'] as int;
-    Color stockColor = qty <= 0
-        ? Colors.red
-        : qty <= 10
-            ? Colors.orange
-            : Colors.green;
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: stockColor,
-          child: Text(
-            qty.toString(),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-        title: Text(product['name']),
-        subtitle: Text(
-          "৳${product['price']} • ${product['category_name'] ?? 'Uncategorized'}",
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        trailing: qty <= 10
-            ? Chip(
-                label: Text(qty <= 0 ? "Out of Stock" : "Low Stock"),
-                backgroundColor: qty <= 0 ? Colors.red[100] : Colors.orange[100],
-              )
-            : null,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,11 +139,43 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         title: const Text("Add Purchase"),
         actions: [
           IconButton(
-            onPressed: loadProducts,
             icon: const Icon(Icons.refresh),
+            onPressed: loadProducts,
           ),
         ],
       ),
+
+      /// 🔥 FIXED & CLEAR SAVE BUTTON
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: SizedBox(
+          height: 55,
+          child: ElevatedButton.icon(
+            onPressed: _isLoading ? null : addPurchase,
+            icon: const Icon(Icons.save),
+            label: const Text(
+              "SAVE PURCHASE",
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ),
+      ),
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -150,43 +184,36 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 3,
-                    color: Colors.blue.shade50,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
-                            "Purchase Details",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 16),
                           DropdownButtonFormField<int>(
-                            initialValue: selectedProductId,
-                            decoration: InputDecoration(
-                              labelText: "Product",
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              prefixIcon: const Icon(Icons.shopping_bag),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
+                            value: selectedProductId,
                             hint: const Text("Select Product"),
+                            decoration: InputDecoration(
+                              prefixIcon:
+                                  const Icon(Icons.shopping_bag_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                             items: products
                                 .map(
                                   (p) => DropdownMenuItem<int>(
-                                    value: p['id'] as int,
+                                    value: p['id'],
                                     child: Text(
                                       "${p['name']} (Stock: ${p['quantity']})",
-                                      style: TextStyle(
-                                        color: (p['quantity'] as int) <= 10 ? Colors.red : Colors.black,
-                                      ),
                                     ),
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setState(() => selectedProductId = v),
+                            onChanged: (v) =>
+                                setState(() => selectedProductId = v),
                           ),
                           const SizedBox(height: 12),
                           TextField(
@@ -194,34 +221,20 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(
                               labelText: "Quantity",
-                              prefixIcon: const Icon(Icons.numbers),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              filled: true,
-                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),
                           TextField(
                             controller: priceController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
                             decoration: InputDecoration(
                               labelText: "Unit Price (৳)",
-                              prefixIcon: const Icon(Icons.attach_money),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 50,
-                            child: ElevatedButton.icon(
-                              onPressed: addPurchase,
-                              icon: const Icon(Icons.add_shopping_cart),
-                              label: const Text("Add Purchase", style: TextStyle(fontSize: 16)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).primaryColor,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                           ),
@@ -229,13 +242,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   const Text(
                     "Available Products",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   ...products.map(_buildProductCard),
+                  const SizedBox(height: 80), // space for bottom button
                 ],
               ),
             ),

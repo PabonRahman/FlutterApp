@@ -11,7 +11,6 @@ class PurchaseListScreen extends StatefulWidget {
 class _PurchaseListScreenState extends State<PurchaseListScreen> {
   List<Map<String, dynamic>> purchases = [];
   bool _isLoading = false;
-  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -25,25 +24,22 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
       purchases = await DatabaseHelper.instance.getPurchases();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading purchases: ${e.toString()}")),
+        SnackBar(content: Text("Error loading purchases: $e")),
       );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _refreshPurchases() async {
-    setState(() => _isRefreshing = true);
-    await loadPurchases();
-    setState(() => _isRefreshing = false);
-  }
-
-  Future<void> _deletePurchase(int id) async {
-    final confirmed = await showDialog<bool>(
+  /// 🔥 DELETE ALL PURCHASE HISTORY
+  Future<void> _deleteAllPurchases() async {
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete Purchase"),
-        content: const Text("Are you sure you want to delete this purchase?"),
+      builder: (_) => AlertDialog(
+        title: const Text("Delete All Purchases"),
+        content: const Text(
+          "This will permanently delete all purchase history.\n\nAre you sure?",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -52,7 +48,7 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
-              "Delete",
+              "Delete All",
               style: TextStyle(color: Colors.red),
             ),
           ),
@@ -60,28 +56,35 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirm != true) return;
 
     setState(() => _isLoading = true);
     try {
-      await DatabaseHelper.instance.deletePurchase(id);
+      await DatabaseHelper.instance.deleteAllPurchases();
       await loadPurchases();
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Purchase deleted successfully"),
+          content: Text("All purchase history deleted"),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error: ${e.toString()}"),
+          content: Text("Error: $e"),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// DELETE SINGLE PURCHASE
+  Future<void> _deletePurchase(int id) async {
+    await DatabaseHelper.instance.deletePurchase(id);
+    loadPurchases();
   }
 
   @override
@@ -91,149 +94,72 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
         title: const Text("Purchase History"),
         actions: [
           IconButton(
-            onPressed: loadPurchases,
+            icon: const Icon(Icons.delete_forever),
+            tooltip: "Delete All",
+            onPressed: purchases.isEmpty ? null : _deleteAllPurchases,
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
+            onPressed: loadPurchases,
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refreshPurchases,
-              child: _isRefreshing
-                  ? const Center(child: CircularProgressIndicator())
-                  : purchases.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.shopping_cart,
-                                size: 80,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                "No purchases yet",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(10),
-                          itemCount: purchases.length,
-                          itemBuilder: (_, i) {
-                            final p = purchases[i];
-                            final date = DateTime.parse(p['date']);
-                            final formattedDate = "${date.day}/${date.month}/${date.year}";
-                            
-                            return Card(
-                              elevation: 3,
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              child: Dismissible(
-                                key: Key(p['id'].toString()),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  color: Colors.red,
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  child: const Icon(Icons.delete, color: Colors.white),
-                                ),
-                                confirmDismiss: (direction) async {
-                                  return await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text("Delete Purchase"),
-                                      content: const Text("Delete this purchase record?"),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context, false),
-                                          child: const Text("Cancel"),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context, true),
-                                          child: const Text(
-                                            "Delete",
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                                onDismissed: (direction) => _deletePurchase(p['id']),
-                                child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.blue[100],
-                                    child: Icon(
-                                      Icons.shopping_cart,
-                                      color: Colors.blue[800],
-                                    ),
-                                  ),
-                                  title: Text(
-                                    p['product_name'],
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "Category: ${p['category_name']}",
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      Text(
-                                        "Qty: ${p['quantity']} × ৳${p['unit_price']}",
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      Text(
-                                        "Date: $formattedDate",
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "৳${p['total_price'].toStringAsFixed(2)}",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "@৳${p['unit_price']}",
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+          : purchases.isEmpty
+              ? const Center(
+                  child: Text(
+                    "No purchase history",
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: purchases.length,
+                  itemBuilder: (_, i) {
+                    final p = purchases[i];
+                    final date = DateTime.parse(p['date']);
+
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: Dismissible(
+                        key: Key(p['id'].toString()),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          color: Colors.red,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          child:
+                              const Icon(Icons.delete, color: Colors.white),
                         ),
-            ),
+                        onDismissed: (_) => _deletePurchase(p['id']),
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.shopping_cart),
+                          ),
+                          title: Text(
+                            p['product_name'],
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            "Qty: ${p['quantity']} × ৳${p['unit_price']}\n"
+                            "Date: ${date.day}/${date.month}/${date.year}",
+                          ),
+                          trailing: Text(
+                            "৳${p['total_price'].toStringAsFixed(2)}",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
