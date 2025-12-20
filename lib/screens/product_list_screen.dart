@@ -1,4 +1,5 @@
 // screens/product_list_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import 'product_screen.dart';
@@ -97,6 +98,21 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  Widget _productImage(String? path) {
+    if (path != null && path.isNotEmpty) {
+      final file = File(path);
+      if (file.existsSync()) {
+        return CircleAvatar(
+          backgroundImage: FileImage(file),
+        );
+      }
+    }
+    return const CircleAvatar(
+      backgroundColor: Colors.blueGrey,
+      child: Icon(Icons.inventory, color: Colors.white),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,7 +153,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
                           return Card(
                             child: ListTile(
-                              leading: const Icon(Icons.inventory),
+                              leading: _productImage(p['image_path']), // Fixed column
                               title: Text(p['name']),
                               subtitle: Text(
                                   "Category: ${p['category_name'] ?? 'N/A'}"),
