@@ -13,21 +13,13 @@ class DatabaseHelper {
     return _database!;
   }
 
-  // ------------------ UPGRADE DB ------------------
-  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // Add image_path to products if DB version < 2
-      await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT;');
-    }
-  }
-
   Future<Database> _initDB(String fileName) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, fileName);
 
     return await openDatabase(
       path,
-      version: 2, // increment version
+      version: 2,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -68,7 +60,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Products table (added image_path)
+    // Products table
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +103,12 @@ class DatabaseHelper {
     ''');
   }
 
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT;');
+    }
+  }
+
   // ---------- UTILITY ----------
   Future<void> resetDatabase() async {
     if (_database != null) {
@@ -123,7 +121,9 @@ class DatabaseHelper {
 
     try {
       await deleteDatabase(path);
-    } catch (e) {}
+    } catch (e) {
+      // Ignore delete errors
+    }
 
     await database;
   }
@@ -310,6 +310,28 @@ class DatabaseHelper {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getProductsByWarehouse(
+    int warehouseId,
+  ) async {
+    final db = await database;
+    try {
+      return await db.rawQuery(
+        '''
+        SELECT 
+          products.*, 
+          categories.name AS category_name
+        FROM products
+        LEFT JOIN categories ON products.category_id = categories.id
+        WHERE products.warehouse_id = ?
+        ORDER BY products.name
+      ''',
+        [warehouseId],
+      );
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getProduct(int id) async {
     final db = await database;
     final res = await db.query('products', where: 'id = ?', whereArgs: [id]);
@@ -401,6 +423,11 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> deleteAllPurchases() async {
+    final db = await database;
+    await db.delete('purchases');
+  }
+
   // ---------- SALE ----------
   Future<int> addSale(int productId, int quantity, double unitPrice) async {
     final db = await database;
@@ -466,26 +493,9 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getProductsByWarehouse(
-    int warehouseId,
-  ) async {
+  Future<void> deleteAllSales() async {
     final db = await database;
-    try {
-      return await db.rawQuery(
-        '''
-      SELECT 
-        products.*, 
-        categories.name AS category_name
-      FROM products
-      LEFT JOIN categories ON products.category_id = categories.id
-      WHERE products.warehouse_id = ?
-      ORDER BY products.name
-    ''',
-        [warehouseId],
-      );
-    } catch (e) {
-      return [];
-    }
+    await db.delete('sales');
   }
 
   // ---------- DASHBOARD STATS ----------
@@ -493,7 +503,7 @@ class DatabaseHelper {
     try {
       final products = await getProducts();
       final categories = await getCategories();
-      final warehouses = await getWarehouses(); // Now works with 0 parameters
+      final warehouses = await getWarehouses();
       final purchases = await getPurchases();
       final sales = await getSales();
 
@@ -537,8 +547,6 @@ class DatabaseHelper {
   // ---------- WAREHOUSE STATS ----------
   Future<Map<String, dynamic>> getWarehouseStats(int warehouseId) async {
     try {
-      final db = await database;
-
       // Get products in this warehouse
       final products = await getProductsByWarehouse(warehouseId);
 
@@ -551,70 +559,23 @@ class DatabaseHelper {
         (sum, p) => sum + (p['quantity'] as int? ?? 0),
       );
 
-      // Calculate total purchase and sale values
-      if (products.isEmpty) {
-        return {
-          'warehouse': warehouse,
-          'totalProducts': 0,
-          'totalQuantity': 0,
-          'occupancy': 0.0,
-          'capacity': warehouse?['capacity'] ?? 0,
-        };
-      }
-
-      final productIds = products.map((p) => p['id']).toList();
-      final placeholders = List.filled(productIds.length, '?').join(',');
-
-      final purchases = await db.rawQuery('''
-      SELECT SUM(total_price) as total_purchase_value
-      FROM purchases
-      WHERE product_id IN ($placeholders)
-    ''', productIds);
-
-      final sales = await db.rawQuery('''
-      SELECT SUM(total_price) as total_sale_value
-      FROM sales
-      WHERE product_id IN ($placeholders)
-    ''', productIds);
-
-      double totalPurchaseValue =
-          purchases.first['total_purchase_value'] as double? ?? 0.0;
-      double totalSaleValue = sales.first['total_sale_value'] as double? ?? 0.0;
+      // Get capacity
       int capacity = warehouse?['capacity'] as int? ?? 0;
       double occupancy = capacity > 0 ? (totalQuantity / capacity) * 100 : 0.0;
 
       return {
-        'warehouse': warehouse,
         'totalProducts': products.length,
         'totalQuantity': totalQuantity,
-        'totalPurchaseValue': totalPurchaseValue,
-        'totalSaleValue': totalSaleValue,
-        'profit': totalSaleValue - totalPurchaseValue,
         'capacity': capacity,
         'occupancy': occupancy,
       };
     } catch (e) {
       return {
-        'warehouse': null,
         'totalProducts': 0,
         'totalQuantity': 0,
-        'totalPurchaseValue': 0.0,
-        'totalSaleValue': 0.0,
-        'profit': 0.0,
         'capacity': 0,
         'occupancy': 0.0,
       };
     }
-  }
-
-  Future<void> deleteAllPurchases() async {
-    final db = await database;
-    await db.delete('purchases');
-  }
-
-
-  Future<void> deleteAllSales() async {
-    final db = await database;
-    await db.delete('sales');
   }
 }

@@ -1,4 +1,3 @@
-// screens/warehouse_detail_screen.dart
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import 'product_list_screen.dart';
@@ -29,7 +28,6 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
     
     setState(() => _isLoading = true);
     try {
-      // FIXED: Use getWarehouse (singular) instead of getWarehouses (plural)
       warehouse = await DatabaseHelper.instance.getWarehouse(widget.warehouseId);
       stats = await DatabaseHelper.instance.getWarehouseStats(widget.warehouseId);
       products = await DatabaseHelper.instance.getProductsByWarehouse(widget.warehouseId);
@@ -88,7 +86,6 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
     final capacity = stats['capacity'] as int? ?? 0;
     final totalQuantity = stats['totalQuantity'] as int? ?? 0;
     final occupancy = stats['occupancy'] as double? ?? 0.0;
-    final totalValue = stats['totalPurchaseValue'] as double? ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -134,7 +131,7 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      if (warehouse!['location'] != null) ...[
+                      if (warehouse!['location'] != null && warehouse!['location'].toString().isNotEmpty) ...[
                         Row(
                           children: [
                             const Icon(
@@ -151,7 +148,7 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      if (warehouse!['manager'] != null) ...[
+                      if (warehouse!['manager'] != null && warehouse!['manager'].toString().isNotEmpty) ...[
                         Row(
                           children: [
                             const Icon(
@@ -168,7 +165,7 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      if (warehouse!['phone'] != null) ...[
+                      if (warehouse!['phone'] != null && warehouse!['phone'].toString().isNotEmpty) ...[
                         Row(
                           children: [
                             const Icon(
@@ -185,7 +182,7 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      if (warehouse!['email'] != null) ...[
+                      if (warehouse!['email'] != null && warehouse!['email'].toString().isNotEmpty) ...[
                         Row(
                           children: [
                             const Icon(
@@ -241,9 +238,9 @@ class _WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                     Colors.orange,
                   ),
                   _statCard(
-                    "Total Value",
-                    "৳${totalValue.toStringAsFixed(2)}",
-                    Icons.attach_money,
+                    "Space Used",
+                    "${occupancy.toStringAsFixed(1)}%",
+                    Icons.pie_chart,
                     Colors.purple,
                   ),
                 ],

@@ -193,7 +193,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       child: Column(
                         children: [
                           DropdownButtonFormField<int>(
-                            value: selectedProductId,
+                            initialValue: selectedProductId,
                             hint: const Text("Select Product"),
                             decoration: InputDecoration(
                               prefixIcon:

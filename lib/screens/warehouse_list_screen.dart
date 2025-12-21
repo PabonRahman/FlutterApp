@@ -1,6 +1,6 @@
-// screens/warehouse_list_screen.dart
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import 'warehouse_detail_screen.dart';
 
 class WarehouseListScreen extends StatefulWidget {
   const WarehouseListScreen({super.key});
@@ -178,11 +178,9 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
 
                   try {
                     if (warehouse == null) {
-                      // Add new
                       await DatabaseHelper.instance.addWarehouse(newWarehouse);
                       _showSuccessSnackbar("Warehouse added successfully");
                     } else {
-                      // Edit existing
                       await DatabaseHelper.instance.updateWarehouse(warehouse['id'], newWarehouse);
                       _showSuccessSnackbar("Warehouse updated successfully");
                     }
@@ -307,59 +305,72 @@ class _WarehouseListScreenState extends State<WarehouseListScreen> {
                             return Card(
                               elevation: 3,
                               margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.all(16),
-                                leading: Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue[50],
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  child: Icon(
-                                    Icons.warehouse,
-                                    color: Colors.blue[700],
-                                  ),
-                                ),
-                                title: Text(
-                                  warehouse['name'],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      warehouse['location'] ?? 'No location',
-                                      style: const TextStyle(fontSize: 12),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => WarehouseDetailScreen(
+                                        warehouseId: warehouse['id'],
+                                      ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "Capacity: $capacity",
-                                      style: const TextStyle(fontSize: 11),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.all(16),
+                                  leading: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[50],
+                                      borderRadius: BorderRadius.circular(25),
                                     ),
-                                    if (warehouse['manager'] != null)
+                                    child: Icon(
+                                      Icons.warehouse,
+                                      color: Colors.blue[700],
+                                    ),
+                                  ),
+                                  title: Text(
+                                    warehouse['name'],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 4),
                                       Text(
-                                        "Manager: ${warehouse['manager']}",
+                                        warehouse['location'] ?? 'No location',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "Capacity: $capacity",
                                         style: const TextStyle(fontSize: 11),
                                       ),
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.orange),
-                                      onPressed: () => _showWarehouseDialog(warehouse: warehouse),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteWarehouse(warehouse['id']),
-                                    ),
-                                  ],
+                                      if (warehouse['manager'] != null)
+                                        Text(
+                                          "Manager: ${warehouse['manager']}",
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                    ],
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.orange),
+                                        onPressed: () => _showWarehouseDialog(warehouse: warehouse),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _deleteWarehouse(warehouse['id']),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
