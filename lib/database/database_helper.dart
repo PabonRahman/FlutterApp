@@ -499,51 +499,101 @@ class DatabaseHelper {
   }
 
   // ---------- DASHBOARD STATS ----------
-  Future<Map<String, dynamic>> getDashboardStats() async {
-    try {
-      final products = await getProducts();
-      final categories = await getCategories();
-      final warehouses = await getWarehouses();
-      final purchases = await getPurchases();
-      final sales = await getSales();
-
-      int totalQuantity = products.fold(
-        0,
-        (sum, p) => sum + (p['quantity'] as int? ?? 0),
+ // ---------- DASHBOARD STATS ----------
+Future<Map<String, dynamic>> getDashboardStats() async {
+  try {
+    final db = await database;
+    
+    // Get basic counts
+    final productsCount = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM products'
+    );
+    final categoriesCount = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM categories'
+    );
+    final warehousesCount = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM warehouses'
+    );
+    
+    // Get total quantity
+    final quantityResult = await db.rawQuery(
+      'SELECT COALESCE(SUM(quantity), 0) as total FROM products'
+    );
+    
+    // Get total sales value
+    final salesResult = await db.rawQuery(
+      'SELECT COALESCE(SUM(total_price), 0) as total FROM sales'
+    );
+    
+    // Get total purchase value
+    final purchaseResult = await db.rawQuery(
+      'SELECT COALESCE(SUM(total_price), 0) as total FROM purchases'
+    );
+    
+    double totalSaleValue = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    double totalPurchaseValue = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    
+    // **CRITICAL FIX: Calculate Cost of Goods Sold (COGS) correctly**
+    double totalCOGS = 0.0;
+    
+    // Get all sales to calculate COGS
+    final allSales = await db.rawQuery('SELECT * FROM sales');
+    
+    for (var sale in allSales) {
+      final productId = sale['product_id'] as int;
+      final soldQuantity = sale['quantity'] as int;
+      
+      // Get purchase history for this product to calculate average cost
+      final purchasesForProduct = await db.rawQuery(
+        'SELECT * FROM purchases WHERE product_id = ?',
+        [productId]
       );
-
-      double totalPurchaseValue = purchases.fold(0.0, (sum, p) {
-        final price = p['total_price'];
-        return sum + (price is num ? price.toDouble() : 0.0);
-      });
-
-      double totalSaleValue = sales.fold(0.0, (sum, s) {
-        final price = s['total_price'];
-        return sum + (price is num ? price.toDouble() : 0.0);
-      });
-
-      return {
-        'totalProducts': products.length,
-        'totalCategories': categories.length,
-        'totalWarehouses': warehouses.length,
-        'totalQuantity': totalQuantity,
-        'totalPurchaseValue': totalPurchaseValue,
-        'totalSaleValue': totalSaleValue,
-        'profit': totalSaleValue - totalPurchaseValue,
-      };
-    } catch (e) {
-      return {
-        'totalProducts': 0,
-        'totalCategories': 0,
-        'totalWarehouses': 0,
-        'totalQuantity': 0,
-        'totalPurchaseValue': 0.0,
-        'totalSaleValue': 0.0,
-        'profit': 0.0,
-      };
+      
+      if (purchasesForProduct.isNotEmpty) {
+        double totalPurchasedValue = 0.0;
+        int totalPurchasedQuantity = 0;
+        
+        for (var purchase in purchasesForProduct) {
+          totalPurchasedValue += (purchase['total_price'] as num).toDouble();
+          totalPurchasedQuantity += purchase['quantity'] as int;
+        }
+        
+        // Calculate average cost per unit
+        if (totalPurchasedQuantity > 0) {
+          double averageCostPerUnit = totalPurchasedValue / totalPurchasedQuantity;
+          double costForThisSale = soldQuantity * averageCostPerUnit;
+          totalCOGS += costForThisSale;
+        }
+      }
     }
+    
+    // Calculate Gross Profit (CORRECT FORMULA)
+    double grossProfit = totalSaleValue - totalCOGS;
+    
+    return {
+      'totalProducts': (productsCount.first['count'] as int?) ?? 0,
+      'totalCategories': (categoriesCount.first['count'] as int?) ?? 0,
+      'totalWarehouses': (warehousesCount.first['count'] as int?) ?? 0,
+      'totalQuantity': (quantityResult.first['total'] as int?) ?? 0,
+      'totalPurchaseValue': totalPurchaseValue, // All purchases ever made
+      'totalSaleValue': totalSaleValue, // All sales ever made
+      'totalCOGS': totalCOGS, // Cost of Goods Sold (actual cost of items sold)
+      'grossProfit': grossProfit, // CORRECT: Sales - COGS
+    };
+  } catch (e) {
+    print('Error in getDashboardStats: $e');
+    return {
+      'totalProducts': 0,
+      'totalCategories': 0,
+      'totalWarehouses': 0,
+      'totalQuantity': 0,
+      'totalPurchaseValue': 0.0,
+      'totalSaleValue': 0.0,
+      'totalCOGS': 0.0,
+      'grossProfit': 0.0,
+    };
   }
-
+}
   // ---------- WAREHOUSE STATS ----------
   Future<Map<String, dynamic>> getWarehouseStats(int warehouseId) async {
     try {

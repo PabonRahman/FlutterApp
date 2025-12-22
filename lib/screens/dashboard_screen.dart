@@ -18,14 +18,15 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  Map<String, dynamic> stats = {
+  Map<String, dynamic> _stats = {
     'totalProducts': 0,
     'totalCategories': 0,
     'totalWarehouses': 0,
     'totalQuantity': 0,
     'totalPurchaseValue': 0.0,
     'totalSaleValue': 0.0,
-    'profit': 0.0,
+    'grossProfit': 0.0,
+    'totalCOGS': 0.0,
   };
 
   bool _isLoading = true;
@@ -37,60 +38,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadStats() async {
+    if (!mounted) return;
+    
     setState(() => _isLoading = true);
+    
     try {
       final data = await DatabaseHelper.instance.getDashboardStats();
       if (!mounted) return;
-      setState(() => stats = data);
+      
+      setState(() => _stats = data);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error: $e")));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error loading dashboard: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   String _formatCurrency(dynamic value) {
-    final num v =
-        value is num ? value : double.tryParse(value.toString()) ?? 0;
-    return '৳${v.toStringAsFixed(2)}';
+    try {
+      final num v = value is num ? value : double.tryParse(value.toString()) ?? 0;
+      return '৳${v.toStringAsFixed(2)}';
+    } catch (_) {
+      return '৳0.00';
+    }
   }
 
-  dynamic _safe(String key) => stats[key] ?? 0;
+  dynamic _safe(String key) => _stats[key] ?? 0;
 
-  /// ✅ FIXED STAT CARD (NO TEXT BREAKING)
-  Widget _statCard(
-      String title, dynamic value, IconData icon, Color color) {
+  /// Stat Card Widget
+  Widget _buildStatCard(String title, dynamic value, IconData icon, Color color) {
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(icon, color: color),
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     title,
-                    style:
-                        const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value.toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value.toString(),
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -102,28 +131,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _dashboardButton(
-      String label, IconData icon, Color color, VoidCallback onTap) {
+  /// Dashboard Button Widget
+  Widget _buildDashboardButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 150,
-        padding: const EdgeInsets.all(16),
+        height: 110,
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
+            Icon(icon, size: 28, color: color),
+            const SizedBox(height: 6),
             Text(
               label,
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontWeight: FontWeight.w600, color: color),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: color,
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -131,202 +172,380 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildGrossProfitCard() {
+    final grossProfit = _safe('grossProfit') as num;
+    final totalCOGS = _safe('totalCOGS') as num;
+    final totalSales = _safe('totalSaleValue') as num;
+    final totalPurchases = _safe('totalPurchaseValue') as num;
+    
+    final profitColor = grossProfit >= 0 ? Colors.green : Colors.red;
+    final icon = grossProfit >= 0 ? Icons.trending_up : Icons.trending_down;
+    final bgColor = grossProfit >= 0 ? Colors.green[50] : Colors.red[50];
+    
+    // Calculate gross profit margin percentage
+    double marginPercent = totalSales > 0 
+        ? (grossProfit / totalSales) * 100 
+        : 0.0;
+
+    return Card(
+      color: bgColor,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: profitColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: profitColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Gross Profit",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _formatCurrency(grossProfit),
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: profitColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Margin: ${marginPercent.toStringAsFixed(1)}%",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: profitColor.withOpacity(0.8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Additional financial metrics
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFinancialMetricRow(
+                    "Sales Revenue",
+                    _formatCurrency(totalSales),
+                    Colors.purple,
+                  ),
+                  const SizedBox(height: 6),
+                  _buildFinancialMetricRow(
+                    "Cost of Goods Sold",
+                    _formatCurrency(totalCOGS),
+                    Colors.orange,
+                  ),
+                  const SizedBox(height: 6),
+                  _buildFinancialMetricRow(
+                    "Total Purchases",
+                    _formatCurrency(totalPurchases),
+                    Colors.blue,
+                    showBorder: false,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinancialMetricRow(
+    String label, 
+    String value, 
+    Color color, {
+    bool showBorder = true,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: showBorder
+          ? BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey.shade300,
+                  width: 0.5,
+                ),
+              ),
+            )
+          : null,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _logout() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (_) => false,
+              );
+            },
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final profit = _safe('profit') as num;
-    final profitColor = profit >= 0 ? Colors.green : Colors.red;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard"),
+        centerTitle: true,
         actions: [
-          IconButton(onPressed: _loadStats, icon: const Icon(Icons.refresh)),
-          IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
+          IconButton(
+            onPressed: _loadStats,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadStats,
-              child: ListView(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                children: [
-                  const Text(
-                    "Statistics",
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    childAspectRatio: 1.5,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    children: [
-                      _statCard("Products", _safe('totalProducts'),
-                          Icons.shopping_bag, Colors.blue),
-                      _statCard("Stock", _safe('totalQuantity'),
-                          Icons.inventory, Colors.green),
-                      _statCard("Warehouses", _safe('totalWarehouses'),
-                          Icons.warehouse, Colors.orange),
-                      _statCard("Categories", _safe('totalCategories'),
-                          Icons.category, Colors.purple),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    childAspectRatio: 1.5,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    children: [
-                      _statCard(
-                        "Purchases",
-                        _formatCurrency(_safe('totalPurchaseValue')),
-                        Icons.shopping_cart,
-                        Colors.orange,
-                      ),
-                      _statCard(
-                        "Sales",
-                        _formatCurrency(_safe('totalSaleValue')),
-                        Icons.attach_money,
-                        Colors.purple,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Card(
-                    color:
-                        profit >= 0 ? Colors.green[50] : Colors.red[50],
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            profit >= 0
-                                ? Icons.trending_up
-                                : Icons.trending_down,
-                            color: profitColor,
-                            size: 32,
-                          ),
-                          const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                profit >= 0 ? "Net Profit" : "Net Loss",
-                                style: const TextStyle(color: Colors.grey),
-                              ),
-                              Text(
-                                _formatCurrency(profit),
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: profitColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Statistics Section
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Text(
+                        "Statistics",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
 
-                  const SizedBox(height: 24),
+                    // First Grid - Basic Stats
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.8,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _buildStatCard(
+                          "Products",
+                          _safe('totalProducts'),
+                          Icons.shopping_bag,
+                          Colors.blue,
+                        ),
+                        _buildStatCard(
+                          "Stock",
+                          _safe('totalQuantity'),
+                          Icons.inventory,
+                          Colors.green,
+                        ),
+                        _buildStatCard(
+                          "Warehouses",
+                          _safe('totalWarehouses'),
+                          Icons.warehouse,
+                          Colors.orange,
+                        ),
+                        _buildStatCard(
+                          "Categories",
+                          _safe('totalCategories'),
+                          Icons.category,
+                          Colors.purple,
+                        ),
+                      ],
+                    ),
 
-                  const Text(
-                    "Quick Actions",
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _dashboardButton("Products", Icons.shopping_bag,
-                          Colors.blue, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const ProductListScreen(warehouseId: null),
-                          ),
-                        ).then((_) => _loadStats());
-                      }),
-                      _dashboardButton("Categories", Icons.category,
-                          Colors.orange, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const CategoryListScreen()),
-                        ).then((_) => _loadStats());
-                      }),
-                      _dashboardButton("Warehouses", Icons.warehouse,
-                          Colors.blue, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const WarehouseListScreen()),
-                        ).then((_) => _loadStats());
-                      }),
-                      _dashboardButton("Add Purchase",
-                          Icons.add_shopping_cart, Colors.green, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const PurchaseScreen()),
-                        ).then((_) => _loadStats());
-                      }),
-                      _dashboardButton("Purchase History", Icons.history,
-                          Colors.blue, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const PurchaseListScreen()),
-                        );
-                      }),
-                      _dashboardButton("Add Sale", Icons.sell,
-                          Colors.purple, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const SaleScreen()),
-                        ).then((_) => _loadStats());
-                      }),
-                      _dashboardButton("Sales History", Icons.receipt,
-                          Colors.purple, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const SaleListScreen()),
-                        );
-                      }),
-                    ],
-                  ),
+                    // Second Grid - Financial Stats
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.8,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _buildStatCard(
+                          "Total Purchases",
+                          _formatCurrency(_safe('totalPurchaseValue')),
+                          Icons.shopping_cart,
+                          Colors.orange,
+                        ),
+                        _buildStatCard(
+                          "Total Sales",
+                          _formatCurrency(_safe('totalSaleValue')),
+                          Icons.attach_money,
+                          Colors.purple,
+                        ),
+                      ],
+                    ),
 
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 16),
+
+                    // Gross Profit Card (with detailed breakdown)
+                    _buildGrossProfitCard(),
+
+                    const SizedBox(height: 24),
+
+                    // Quick Actions Section
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Text(
+                        "Quick Actions",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      alignment: WrapAlignment.start,
+                      children: [
+                        _buildDashboardButton(
+                          "Products",
+                          Icons.shopping_bag,
+                          Colors.blue,
+                          () => _navigateTo(const ProductListScreen(warehouseId: null)),
+                        ),
+                        _buildDashboardButton(
+                          "Categories",
+                          Icons.category,
+                          Colors.orange,
+                          () => _navigateTo(const CategoryListScreen()),
+                        ),
+                        _buildDashboardButton(
+                          "Warehouses",
+                          Icons.warehouse,
+                          Colors.blue,
+                          () => _navigateTo(const WarehouseListScreen()),
+                        ),
+                        _buildDashboardButton(
+                          "Add Purchase",
+                          Icons.add_shopping_cart,
+                          Colors.green,
+                          () => _navigateTo(const PurchaseScreen()),
+                        ),
+                        _buildDashboardButton(
+                          "Purchase History",
+                          Icons.history,
+                          Colors.blue,
+                          () => _navigateTo(const PurchaseListScreen()),
+                        ),
+                        _buildDashboardButton(
+                          "Add Sale",
+                          Icons.sell,
+                          Colors.purple,
+                          () => _navigateTo(const SaleScreen()),
+                        ),
+                        _buildDashboardButton(
+                          "Sales History",
+                          Icons.receipt,
+                          Colors.purple,
+                          () => _navigateTo(const SaleListScreen()),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             ),
     );
+  }
+
+  void _navigateTo(Widget screen) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    ).then((_) => _loadStats());
   }
 }

@@ -111,7 +111,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         ),
         title: Text(product['name']),
         subtitle: Text(
-          "৳${product['price']} • ${product['category_name'] ?? 'Uncategorized'}",
+          "${product['category_name'] ?? 'Uncategorized'}",
           style: const TextStyle(fontSize: 12),
         ),
         trailing: qty <= 10
@@ -144,38 +144,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
           ),
         ],
       ),
-
-      /// 🔥 FIXED & CLEAR SAVE BUTTON
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-            ),
-          ],
-        ),
-        child: SizedBox(
-          height: 55,
-          child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : addPurchase,
-            icon: const Icon(Icons.save),
-            label: const Text(
-              "SAVE PURCHASE",
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-        ),
-      ),
-
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -183,6 +151,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Purchase Form Card
                   Card(
                     elevation: 3,
                     shape: RoundedRectangleBorder(
@@ -238,18 +207,44 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                               ),
                             ),
                           ),
+                          
+                          // ADD PURCHASE BUTTON - MOVED HERE
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            height: 55,
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _isLoading ? null : addPurchase,
+                              icon: const Icon(Icons.save),
+                              label: const Text(
+                                "SAVE PURCHASE",
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 20),
+
+                  // Available Products Section
                   const Text(
                     "Available Products",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   ...products.map(_buildProductCard),
-                  const SizedBox(height: 80), // space for bottom button
                 ],
               ),
             ),
