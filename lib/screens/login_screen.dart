@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     size: 80, color: Theme.of(context).primaryColor),
                 const SizedBox(height: 16),
                 Text(
-                  "Inventory Manager",
+                  "Inventory Management",
                   style: Theme.of(context)
                       .textTheme
                       .headlineMedium
